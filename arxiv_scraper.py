@@ -204,7 +204,7 @@ def get_papers(config: dict) -> List[Paper]:
     """
     获取所有指定分类的论文。
     """
-    area_list = ["cs.AI", "cs.LG"]  # 使用具体分类，避免通配符
+    area_list = config["FILTERING"]["arxiv_category"].split(',')
     all_papers = []
     for area in area_list:
         papers = get_papers_from_arxiv_rss_api(area, config)
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     all_papers = get_papers(config)
 
     # 保存到文件
-    save_papers(all_papers, "./output/")
+    save_papers(all_papers, "./in/")
 
     # 打印摘要信息
     print(f"Fetched {len(all_papers)} papers.")
@@ -256,7 +256,3 @@ if __name__ == "__main__":
             print(f"{idx}. {paper.title}")
     else:
         print("No papers fetched.")
-
-
-
-

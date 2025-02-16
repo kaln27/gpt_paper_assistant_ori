@@ -278,8 +278,7 @@ if __name__ == "__main__":
     with open("configs/postfix_prompt.txt", "r") as f:
         postfix_prompt = f.read()
     # loads papers from 'in/debug_papers.json' and filters them
-    with open("in/debug_papers.json", "r") as f:
-        # with open("in/gpt_paper_batches.debug-11-10.json", "r") as f:
+    with open("in/papers.json", "r") as f:
         paper_list_in_dict = json.load(f)
     papers = [
         [
@@ -323,6 +322,6 @@ if __name__ == "__main__":
     selected_papers = {key: paper_outputs[key] for key in sorted_keys}
 
     with open(
-        config["OUTPUT"]["output_path"] + "filter_paper_test.debug.json", "w"
+        config["OUTPUT"]["output_path"] + "output.json", "w"
     ) as outfile:
         json.dump(selected_papers, outfile, cls=EnhancedJSONEncoder, indent=4)
