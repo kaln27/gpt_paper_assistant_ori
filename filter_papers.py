@@ -242,7 +242,7 @@ def filter_by_gpt(
 
 
 if __name__ == "__main__":
-    OAI_KEY = os.environ.get("OAI_KEY2")
+    OAI_KEY = os.environ.get("OAI_KEY")
     if OAI_KEY is None:
         raise ValueError(
             "OpenAI key is not set - please set OAI_KEY to your OpenAI key"
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     client = OpenAI(api_key=OAI_KEY, base_url="https://api.siliconflow.cn/v1")
     
     response = client.chat.completions.create(
-        model="deepseek-ai/DeepSeek-V2.5",
+        model="deepseek-ai/DeepSeek-V3",
         messages=[
             {"role": "system", "content": "You are a helpful assistant"},
             {"role": "user", "content": "Hello"},
