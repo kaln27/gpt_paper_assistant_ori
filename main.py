@@ -188,7 +188,7 @@ def translate_to_chinese_via_deepseek(text: str, client: OpenAI) -> str:
     try:
         # 使用 DeepSeek API 的 chat.completions.create 方法
         response = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V2.5",
+            model="deepseek-ai/DeepSeek-V3",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that translates English text to Chinese."},
                 {"role": "user", "content": f"Translate the following text to Chinese:\n\n{text}"},
