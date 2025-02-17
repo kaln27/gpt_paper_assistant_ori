@@ -139,7 +139,7 @@ def get_papers(
 def get_authors(
     all_authors: list[str], S2_API_KEY: str, batch_size: int = 100, **kwargs
 ):
-    # first get the list of all author ids by querying by author names
+    # first get the list of all author's id by querying the author's name
     author_metadata_dict = {}
     with Session() as session:
         for author in tqdm(all_authors):
@@ -162,7 +162,7 @@ def get_papers_from_arxiv(config):
         papers = get_papers_from_arxiv_rss_api(area.strip(), config)
         paper_set.update(set(papers))
     if config["OUTPUT"].getboolean("debug_messages"):
-        print("Number of papers:" + str(len(paper_set)))
+        print("Number of papers: " + str(len(paper_set)))
     return paper_set
 
 
@@ -214,18 +214,20 @@ if __name__ == "__main__":
     config.read("configs/config.ini")
 
     S2_API_KEY = os.environ.get("S2_KEY")
-    OAI_KEY = os.environ.get("OAI_KEY2")
+    OAI_KEY = os.environ.get("OAI_KEY")
     if OAI_KEY is None:
         raise ValueError(
             "OpenAI key is not set - please set OAI_KEY to your OpenAI key"
         )
     openai_client = OpenAI(api_key=OAI_KEY, base_url="https://api.siliconflow.cn/v1")
-    #openai_client = openai
-    # load the author list
+
+    # load the author list TODO: What's meaning of this?
     with io.open("configs/authors.txt", "r") as fopen:
         author_names, author_ids = parse_authors(fopen.readlines())
     author_id_set = set(author_ids)
 
+    if config["OUTPUT"].getboolean("debug_messages"):
+        print("Getting papers from arxiv")
     papers = list(get_papers_from_arxiv(config))
     # dump all papers for debugging
 
@@ -234,7 +236,8 @@ if __name__ == "__main__":
         all_authors.update(set(paper.authors))
     if config["OUTPUT"].getboolean("debug_messages"):
         print("Getting author info for " + str(len(all_authors)) + " authors")
-    all_authors = get_authors(list(all_authors), S2_API_KEY)
+
+    all_authors = get_authors(list(all_authors)[:50], S2_API_KEY)
 
     if config["OUTPUT"].getboolean("dump_debug_file"):
         with open(
@@ -250,9 +253,14 @@ if __name__ == "__main__":
         ) as outfile:
             json.dump(list(author_id_set), outfile, cls=EnhancedJSONEncoder, indent=4)
 
+    if config["OUTPUT"].getboolean("debug_messages"):
+        print("filtering by author")
     selected_papers, all_papers, sort_dict = filter_by_author(
         all_authors, papers, author_id_set, config
     )
+
+    if config["OUTPUT"].getboolean("debug_messages"):
+        print("filtering by gpt")
     filter_by_gpt(
         all_authors,
         papers,
@@ -263,8 +271,10 @@ if __name__ == "__main__":
         sort_dict,
     )
 
-    #增加翻译成中文的模块
+    # 增加翻译成中文的模块
     # 对筛选出的论文标题和摘要进行翻译
+    if config["OUTPUT"].getboolean("debug_messages"):
+        print("translating to chinese")
     for paper_id, paper in selected_papers.items():
         print(f"Translating paper: {paper['title']}")
         paper['title_cn'] = translate_to_chinese_via_deepseek(paper['title'], openai_client)

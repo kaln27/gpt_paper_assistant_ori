@@ -2,18 +2,41 @@ import configparser
 import dataclasses
 import json
 import re
-from typing import List
+from typing import List, Tuple
 import os
 
 import retry
 import openai
-print(openai.__version__)
+print(f"openai version : {openai.__version__}")
 from openai import OpenAI
 import openai
 from tqdm import tqdm
 
 from arxiv_scraper import Paper
 from arxiv_scraper import EnhancedJSONEncoder
+
+
+def paper_to_string(paper_entry: Paper) -> str:
+    # renders each paper into a string to be processed by GPT
+    new_str = (
+        "ArXiv ID: "
+        + paper_entry.arxiv_id
+        + "\n"
+        + "Title: "
+        + paper_entry.title
+        + "\n"
+        + "Authors: "
+        + " and ".join(paper_entry.authors)
+        + "\n"
+        + "Abstract: "
+        + paper_entry.abstract[:4000]
+    )
+    return new_str
+
+
+def batched(items, batch_size):
+    # takes a list and returns a list of list with batch_size
+    return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
 
 def filter_by_author(all_authors, papers, author_targets, config):
@@ -56,17 +79,18 @@ def filter_papers_by_hindex(all_authors, papers, config):
 
 
 def calc_price(model, usage):
+    # current : USD
     if model == "gpt-4-1106-preview":
         return (0.01 * usage.prompt_tokens + 0.03 * usage.completion_tokens) / 1000.0
-    if model == "gpt-4":
+    elif model == "gpt-4":
         return (0.03 * usage.prompt_tokens + 0.06 * usage.completion_tokens) / 1000.0
-    if (model == "gpt-3.5-turbo") or (model == "gpt-3.5-turbo-1106"):
+    elif (model == "gpt-3.5-turbo") or (model == "gpt-3.5-turbo-1106"):
         return (0.0015 * usage.prompt_tokens + 0.002 * usage.completion_tokens) / 1000.0
-    if model == "deepseek-ai/DeepSeek-V3":
+    elif model == "deepseek-ai/DeepSeek-V3":
         return ((0.27 * usage.prompt_tokens) / 1_000_000) + ((1.1 * usage.completion_tokens) / 1_000_000)
 
 
-@retry.retry(tries=3, delay=2)
+@retry.retry(tries=5, delay=2)
 def call_chatgpt(full_prompt, openai_client, model):
     return openai_client.chat.completions.create(
         model=model,
@@ -74,7 +98,6 @@ def call_chatgpt(full_prompt, openai_client, model):
         temperature=0,
         seed=0
     )
-
 
 
 def run_and_parse_chatgpt(full_prompt, openai_client, config):
@@ -102,32 +125,9 @@ def run_and_parse_chatgpt(full_prompt, openai_client, config):
     return json_dicts, calc_price(config["SELECTION"]["model"], completion.usage)
 
 
-def paper_to_string(paper_entry: Paper) -> str:
-    # renders each paper into a string to be processed by GPT
-    new_str = (
-        "ArXiv ID: "
-        + paper_entry.arxiv_id
-        + "\n"
-        + "Title: "
-        + paper_entry.title
-        + "\n"
-        + "Authors: "
-        + " and ".join(paper_entry.authors)
-        + "\n"
-        + "Abstract: "
-        + paper_entry.abstract[:4000]
-    )
-    return new_str
-
-
-def batched(items, batch_size):
-    # takes a list and returns a list of list with batch_size
-    return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
-
-
 def filter_papers_by_title(
-    papers, config, openai_client, base_prompt, criterion
-) -> List[Paper]:
+    papers: List[Paper], config, openai_client, base_prompt, criterion
+) -> Tuple[List[Paper], float]:
     filter_postfix = 'Identify any papers that are absolutely and completely irrelavent to the criteria, and you are absolutely sure your friend will not enjoy, formatted as a list of arxiv ids like ["ID1", "ID2", "ID3"..]. Be extremely cautious, and if you are unsure at all, do not add a paper in this list. You will check it in detail later.\n Directly respond with the list, do not add ANY extra text before or after the list. Even if every paper seems irrelevant, please keep at least TWO papers'
     batches_of_papers = batched(papers, 20)
     final_list = []
@@ -207,6 +207,8 @@ def filter_by_gpt(
         # batch the remaining papers and invoke GPT
         batch_of_papers = batched(paper_list, int(config["SELECTION"]["batch_size"]))
         scored_batches = []
+        if config["OUTPUT"].getboolean("debug_messages"):
+            print("Geting novelty and relevance scores by using GPT")
         for batch in tqdm(batch_of_papers):
             scored_in_batch = []
             json_dicts, cost = run_on_batch(
@@ -242,6 +244,8 @@ def filter_by_gpt(
 
 
 if __name__ == "__main__":
+    # This is for debug. Don't run it directly
+
     OAI_KEY = os.environ.get("OAI_KEY")
     if OAI_KEY is None:
         raise ValueError(
@@ -264,12 +268,13 @@ if __name__ == "__main__":
     print(response.choices[0].message.content)
     config = configparser.ConfigParser()
     config.read("configs/config.ini")
+    batch_size = int(config["SELECTION"]["batch_size"])
     # now load the api keys
     keyconfig = configparser.ConfigParser()
     keyconfig.read("configs/keys.ini")
-    #S2_API_KEY = keyconfig["KEYS"]["semanticscholar"]
+    # S2_API_KEY = keyconfig["KEYS"]["semanticscholar"]
+
     openai_client = OpenAI(api_key=OAI_KEY, base_url="https://api.siliconflow.cn/v1")
-    #openai_client = openai
     # deal with config parsing
     with open("configs/base_prompt.txt", "r") as f:
         base_prompt = f.read()
@@ -292,10 +297,12 @@ if __name__ == "__main__":
         ]
         for batch in paper_list_in_dict
     ]
+
     all_papers = {}
     paper_outputs = {}
     sort_dict = {}
     total_cost = 0
+
     for batch in tqdm(papers):
         json_dicts, cost = run_on_batch(
             batch, base_prompt, criterion, postfix_prompt, openai_client, config
@@ -310,7 +317,7 @@ if __name__ == "__main__":
             }
             sort_dict[jdict["ARXIVID"]] = jdict["RELEVANCE"] + jdict["NOVELTY"]
 
-        # sort the papers by relevance and novelty
+    # sort the papers by relevance and novelty
     print("total cost:" + str(total_cost))
     keys = list(sort_dict.keys())
     values = list(sort_dict.values())
