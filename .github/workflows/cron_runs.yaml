@@ -13,6 +13,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      OAI_KEY: ${{ secrets.OAI_KEY }}
+      S2_KEY: ${{ secrets.S2_KEY }}
+      SLACK_KEY: ${{ secrets.SLACK_KEY }}
 
     steps:
     - uses: actions/checkout@v3
